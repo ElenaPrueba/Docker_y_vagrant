@@ -1,0 +1,14 @@
+---
+- hosts: all
+  sudo: yes
+
+  vars:
+    - java_packages_debian: openjdk-8-jre
+    - java_packages_centos: java-1.8.0-openjdk
+
+  roles:
+#     - java
+    - common
+    - jenkins
+#    - { role: common, tags: common }
+#    - { role: jenkins, tags: jenkins }

@@ -1,0 +1,35 @@
+Ubuntu:
+
+sudo service nginx status
+sudo service nginx startnx/sites-available
+_
+
+Debian:
+
+ps -ef | grep nginx
+ps -ef
+sudo service --status-all
+sudo service nginx start
+sudo service nginx status
+cd /var/log/nginx
+ls: access.log  error.log
+sudo cat error.log
+
+
+systemctl status nginx.service
+
+ps -ef | grep jenkins
+
+
+
+Java
+sudo apt-get install oracle-java8-installer
+sudo add-apt-repository ppa:openjdk-r/ppa
+sudo apt-get update
+sudo apt-get install openjdk-8-jre
+
+
+fichero hosts windows: C/windows/system32/etc/host
+
+Ansible paybooks:
+ansible-playbook -i inventory /home/vagrant/provision/install.yml

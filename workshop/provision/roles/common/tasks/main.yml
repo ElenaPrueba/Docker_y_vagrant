@@ -1,0 +1,10 @@
+---
+- name: Instalar paquetes comunes del SO Debian
+  apt: name={{ item }} state=latest update_cache=yes cache_valid_time=3600
+  with_items: '{{ common_packages }}'
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+
+- name: Instalar paquetes comunes del SO CentOs
+  yum: name={{ item }} state=latest
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+  with_items: '{{ common_packages }}'

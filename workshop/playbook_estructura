@@ -1,0 +1,143 @@
+provision/roles/common/tasks/main.yml
+---
+- name: Instalar paquetes comunes del SO Debian
+  apt: name={{ item }} state=latest update_cache=yes cache_valid_time=3600
+  with_items: '{{ common_packages }}'
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+
+- name: Instalar paquetes comunes del SO CentOs
+  yum: name={{ item }} state=latest
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+  with_items: '{{ common_packages }}'
+
+
+provision/roles/common/defaults/main.yml
+---
+common_packages:
+  - git
+  - curl
+
+
+provision/roles/jenkins/meta/main.yml
+---
+---
+dependencies:
+  - { role: nginx, port_number:8080, site_name: jenkins, force_nginx: True, config_file: roles/jenkins/templates/jenkins-nginx.j2 }
+
+provision/roles/jenkins/defaults/main.yml
+---
+jenkins_packages:
+  - jenkins
+
+#jenkins_public_key_url: https://jenkins-ci.org/debian/jenkins-ci.org.key
+
+provision/roles/jenkins/tasks/main.yml
+---
+- name: Instalar clave publica de jenkins
+  apt_key: url=http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key state=present
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+  become: yes
+
+- name: Añadir url de repositorio jenkins al sistema
+  apt_repository: repo='deb http://pkg.jenkins-ci.org/debian binary/' state=present update_cache=yes
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+  become: yes
+
+- name: Instalar jenkins y sus dependencias
+  apt: name={{ item }} state=latest update_cache=yes cache_valid_time=3600
+  with_items: "{{ jenkins_packages }}"
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+  become: yes
+
+- name: Instalar clave publica de jenkins  para CentOS
+  rpm_key:
+    key: https://jenkins-ci.org/redhat/jenkins-ci.org.key
+    state: present
+  become: yes
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+- name: Ensure Jenkins repo is installed.
+  get_url:
+    url: "http://pkg.jenkins-ci.org/redhat/jenkins.repo"
+    dest: /etc/yum.repos.d/jenkins.repo
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+  become: yes
+
+- name: Instalar jenkins y sus dependencias en debian
+  yum: name={{ item }} state=latest lock_timeout=180
+  become: yes
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+  with_items: "{{ jenkins_packages }}"
+
+
+provision/roles/jenkins/templates/jenkins-nginx.j2
+upstream app_server {
+    server 127.0.0.1:8080 fail_timeout=0;
+}
+
+server{
+    listen 80;
+    listen [::]:{{ port_number }} default ipv6only=on;
+    server_name {{ site_name }}
+
+    location / {
+        proxy_set_header X-Forwarded-For ~proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+
+        if (!-f $request_filename) {
+            proxy_pass http://app_server;
+            break;
+        }
+    }
+}
+
+
+provision/install.yml
+---
+- hosts: all
+
+  roles:
+    - common
+    - jenkins
+
+
+provision/roles/nginx/defaults/main.yml
+---
+nginx_packages:
+  - nginx
+force_nginx: False
+
+
+provision/roles/nginx/tasks/main.yml
+---
+- name: Instalar Nginx y sus dependencias para Debian
+  apt: name={{ item }} state=latest update_cache=yes cache_valid_time=3600
+  with_items: '{{ nginx_packages }}'
+  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+
+- name: Instalar Ngins y sus dependencias para CentOs
+  yum: name={{ item }} state=latest
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+  with_items: '{{ nginx_packages }}'
+
+- name: Eliminar fichero de configuracion por defecto de Nginx
+  file: path: /etc/nginx/sites-enabled/default state=absent
+  when: '{{ force_nginx }}' == True
+
+- name: Intalar configuracion deseada
+  template: src='{{ config_file }}'  dest/etc/ngnix/sites-enabled/'{{ config_file }}' owner=root group=root node=0644
+  when: '{{ force_nginx }}' == True
+
+- name: Activar nuevo site
+  file: src=/etc/nginx/sites-available/'{{ site_name }}' dest=/etc/nginx/sites-enabled/'{{ site_name }}' state=link owner=root group=root
+  when: force_nginx == True
+  notify: Reiniciar servicio Nginx
+
+#- name: Reiniciar servicio Nginx
+#  service: name=nginx state=restarted enabled=yes
+# Lo hemos movido a handlers
+
+provision/roles/nginx/handlers/main.yml (Código reutilizable)
+Se utiliza para reiniciar servicios.
+Lo que hace es, en cualquier momento, a través de la opción Notify y el nombre(name), ansible buscara en la carpeta handlers la tarea, sin tener que hacer todo concurrentemente

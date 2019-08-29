@@ -1,0 +1,124 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+BOX_IMAGE = "centos/7"
+#BOX_IMAGE = "generic/rhel7"
+NODE_COUNT = 11
+
+Vagrant.configure("2") do |config|
+
+  # MANAGER
+  config.vm.define "manager" do |manager|
+    manager.vm.box = BOX_IMAGE
+    #manager.vm.box = "mmichal/CentosJenkins"
+
+    manager.vm.hostname = "manager"
+    manager.vm.network "forwarded_port", guest: 8080, host: 8080
+    manager.vm.network "private_network", ip: "192.168.10.100"
+
+    manager.vm.provider :virtualbox do |vb|
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      vb.customize ["modifyvm", :id, "--memory", 2048]
+      vb.customize ["modifyvm", :id, "--name", "manager"]
+    end
+
+    # Paqueteria
+    manager.vm.provision "shell", inline: <<-SCRIPT
+	  sudo yum install epel-release
+      sudo yum install ansible -y
+      SCRIPT
+
+    # DNS e inventario
+    (1..NODE_COUNT).each do |i|
+      manager.vm.provision "shell", inline: "sudo echo \"192.168.10.#{i+200} node#{i}\" | sudo tee -a /etc/hosts"
+      manager.vm.provision "shell", inline: "sudo echo \"node#{i}\" | sudo tee -a /etc/ansible/hosts"
+    end
+
+    # Configuracion de ssh
+    manager.vm.provision "shell", inline: <<-SCRIPT
+      sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+      service sshd restart
+      SCRIPT
+
+    # Configuración de usuario vagrant
+    private_key = File.read("id_rsa")
+    manager.vm.provision "shell", inline: <<-SCRIPT
+      echo 'Copying ansible-vm public SSH Keys to the VM for user vagrant'
+      echo '#{private_key}' >> /home/vagrant/.ssh/id_rsa
+
+      echo 'Setting ssh config for user vagrant'
+      echo 'Host *' >> /home/vagrant/.ssh/config
+      echo 'StrictHostKeyChecking no' >> /home/vagrant/.ssh/config
+      echo 'UserKnownHostsFile /dev/null' >> /home/vagrant/.ssh/config
+      chown -R vagrant:vagrant /home/vagrant/.ssh/config
+      chmod -R 600 /home/vagrant/.ssh/config
+
+      SCRIPT
+
+
+  end
+
+  # MANAGED NODES
+  (1..NODE_COUNT).each do |i|
+    public_key = File.read("id_rsa.pub")
+    config.vm.define "node#{i}" do |subconfig|
+      subconfig.vm.box = BOX_IMAGE
+      subconfig.vm.hostname = "node#{i}"
+
+      subconfig.vm.network "private_network", ip: "192.168.10.#{i+200}"
+
+      subconfig.vm.provider :virtualbox do |vb|
+        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+        vb.customize ["modifyvm", :id, "--memory", 2048]
+        vb.customize ["modifyvm", :id, "--name", "node#{i}"]
+      end
+
+      # Configuracion de ssh
+      subconfig.vm.provision "shell", inline: <<-SCRIPT
+        sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        service sshd restart
+      SCRIPT
+
+      # Configuración de usuario vagrant
+      subconfig.vm.provision "shell", inline: <<-SCRIPT
+        echo 'Copying manager-vm public SSH Keys to the VM'
+        echo '#{public_key}' >> /home/vagrant/.ssh/authorized_keys
+        chmod -R 600 /home/vagrant/.ssh/authorized_keys
+        echo 'Setting ssh config'
+        echo 'Host *' >> /home/vagrant/.ssh/config
+        echo 'StrictHostKeyChecking no' >> /home/vagrant/.ssh/config
+        echo 'UserKnownHostsFile /dev/null' >> /home/vagrant/.ssh/config
+        chown -R vagrant:vagrant /home/vagrant/.ssh/config
+        chmod -R 600 /home/vagrant/.ssh/config
+      SCRIPT
+
+    end
+
+  end
+
+
+  # PEPITO
+  config.vm.define "pepito" do |subconfig|
+    subconfig.vm.box = "ubuntu/trusty64"
+
+    subconfig.vm.hostname = "pepito"
+    subconfig.vm.network "private_network", ip: "192.168.10.202"
+
+    #subconfig.vm.network "forwarded_port", host:8080, guest:80, auto_correct=true
+    #subconfig.vm.network "forwarded_port", host:8080, guest:80, auto_correct=true
+
+    subconfig.vm.provider :virtualbox do |vb|
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      vb.customize ["modifyvm", :id, "--memory", 2048]
+      vb.customize ["modifyvm", :id, "--name", "pepito"]
+    end
+
+    # subconfig.vm.provision "shell", inline: <<-SCRIPT
+    #
+    # sudo add-apt-repository ppa:openjdk-r/ppa -y
+    # sudo apt-get update
+    # sudo apt-get install openjdk-8-jre -y
+    #   SCRIPT
+
+  end
+
+end

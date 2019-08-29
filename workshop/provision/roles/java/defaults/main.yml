@@ -1,0 +1,5 @@
+---
+java_packages_debian:
+  - java
+java_packages_centos:
+  - java
